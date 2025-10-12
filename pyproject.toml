@@ -1,0 +1,41 @@
+[project]
+name = "oai2ant"
+version = "0.1.0"
+description = "Proxy service bridging OpenAI backends with Claude Code clients"
+authors = [{ name = "oai2ant contributors" }]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.112.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.7.0",
+    "python-dotenv>=1.0.1",
+    "prometheus-client>=0.20.0"
+]
+
+[project.scripts]
+o2a = "oai2ant.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.5.0"
+]
+
+[tool.uv]
+dev-dependencies = ["oai2ant[dev]"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
