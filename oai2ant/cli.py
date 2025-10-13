@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -11,6 +12,8 @@ import time
 import webbrowser
 from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
 import uvicorn
@@ -90,6 +93,22 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 
 def _start_ui(host: str, port: int) -> subprocess.Popen[str]:
+    # Check if UI directory exists - it should only exist in development environment
+    ui_dir = PROJECT_ROOT / "ui"
+    
+    # If PROJECT_ROOT doesn't have a ui directory, we're likely running as an installed tool
+    # Try to find the project in the current working directory instead
+    if not ui_dir.exists():
+        cwd_ui_dir = Path.cwd() / "ui"
+        if cwd_ui_dir.exists():
+            ui_dir = cwd_ui_dir
+        else:
+            raise RuntimeError(
+                "UI directory not found. The --ui option only works when running from the project source directory. "
+                "For development, run 'uv run uvicorn proxy.main:app --reload --port 8082' in one terminal, "
+                "then 'npm run dev --prefix ui' in another terminal."
+            )
+    
     npm_command = [
         "npm",
         "run",
@@ -105,7 +124,7 @@ def _start_ui(host: str, port: int) -> subprocess.Popen[str]:
     try:
         process = subprocess.Popen(
             npm_command,
-            cwd=str(PROJECT_ROOT / "ui"),
+            cwd=str(ui_dir),
             env=env,
             stdin=None,
         )
@@ -140,14 +159,14 @@ def _ensure_proxy_running(
 
 def _run_proxy(host: str, port: int, reload: bool, log_level: str) -> None:
     config = uvicorn.Config(
-        "proxy.main:app",
+        "oai2ant.proxy.main:app",
         host=host,
         port=port,
         reload=reload,
         log_level=log_level,
         reload_dirs=[
-            str(PROJECT_ROOT / "proxy"),
-            str(PROJECT_ROOT / "config"),
+            str(PROJECT_ROOT / "oai2ant" / "proxy"),
+            str(PROJECT_ROOT / "oai2ant" / "config"),
         ],
     )
     server = uvicorn.Server(config)

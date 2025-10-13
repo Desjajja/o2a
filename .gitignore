@@ -1,11 +1,14 @@
 __pycache__/
 *.pyc
 .env
-config/settings.json
-config/settings.staged.json
+**/settings.json
+**/settings.staged.json
 node_modules/
 ui/dist/
 .ui
 coverage/
 pytest_cache/
 .DS_Store
+
+*.egg-info/
+build/

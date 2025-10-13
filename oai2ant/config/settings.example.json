@@ -1,0 +1,20 @@
+{
+  "providers": [
+    {
+      "id": "example",
+      "name": "OpenAI Primary",
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "sk-your-key",
+      "models": [
+        {
+          "proxy_name": "claude-sonnet-4-5-20250929",
+          "upstream_name": "gpt-4.1"
+        },
+        {
+          "proxy_name": "claude-3-5-haiku-20241022",
+          "upstream_name": "gpt-4.1-mini"
+        }
+      ]
+    }
+  ]
+}
