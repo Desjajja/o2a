@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Dict, Tuple
 
 from fastapi import HTTPException
@@ -8,6 +9,8 @@ from fastapi import HTTPException
 from .config_manager import SettingsManager
 from .models import ModelMapping, ProviderConfig, ProxyConfig
 from .providers.openai import OpenAIProviderClient, build_openai_client
+
+logger = logging.getLogger(__name__)
 
 
 class ProxyRuntime:
@@ -34,6 +37,13 @@ class ProxyRuntime:
         try:
             return await self._settings.lookup_model(proxy_name)
         except KeyError:
+            # Log available models to aid debugging without exposing secrets
+            try:
+                active = await self._settings.get_active()
+                available = [m.proxy_name for p in active.providers for m in p.models]
+            except Exception:  # pragma: no cover - defensive
+                available = []
+            logger.warning("Requested unknown model '%s'. Available: %s", proxy_name, available)
             raise HTTPException(status_code=404, detail=f"Model {proxy_name} is not configured")
 
     async def get_client(self, provider_id: str) -> OpenAIProviderClient:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 from typing import Any, AsyncGenerator, Dict
 
 import httpx
@@ -20,16 +21,22 @@ class OpenAIProviderClient:
                 "Content-Type": "application/json",
             },
         )
+        self._log = logging.getLogger(__name__)
 
     async def close(self) -> None:
         await self._client.aclose()
 
     async def chat_completions(self, payload: Dict) -> httpx.Response:
-        return await self._client.post("/chat/completions", json=payload)
+        self._log.debug("POST %s/chat/completions", self._base_url)
+        resp = await self._client.post("/chat/completions", json=payload)
+        self._log.debug("POST /chat/completions -> %s", resp.status_code)
+        return resp
 
     @asynccontextmanager
     async def stream_chat_completions(self, payload: Dict) -> AsyncGenerator[httpx.Response, None]:
+        self._log.debug("STREAM POST %s/chat/completions", self._base_url)
         async with self._client.stream("POST", "/chat/completions", json=payload) as response:
+            self._log.debug("STREAM /chat/completions -> %s", response.status_code)
             yield response
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import AsyncGenerator, Dict, Iterable, List, Optional, Union
 from uuid import uuid4
@@ -9,6 +10,7 @@ from fastapi import HTTPException
 
 ANTHROPIC_EVENT_TERMINATOR = "data: [DONE]\n\n"
 
+logger = logging.getLogger(__name__)
 
 def _collapse_content(blocks: Iterable[Dict]) -> str:
     text_parts: List[str] = []
@@ -49,6 +51,9 @@ def anthropic_request_to_openai(payload: Dict, upstream_model: str) -> Dict:
         elif isinstance(content, list):
             content_text = _collapse_content(content)
         else:
+            logger.warning(
+                "Invalid message content type: %s", type(content).__name__
+            )
             raise HTTPException(status_code=400, detail="Invalid content format")
         messages.append({
             "role": role,
