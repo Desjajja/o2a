@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
-from typing import AsyncGenerator, Dict, Iterable, List, Optional
+from typing import AsyncGenerator, Dict, Iterable, List, Optional, Union
+from uuid import uuid4
 
 from fastapi import HTTPException
 
 ANTHROPIC_EVENT_TERMINATOR = "data: [DONE]\n\n"
+
+logger = logging.getLogger(__name__)
 
 
 def _collapse_content(blocks: Iterable[Dict]) -> str:
@@ -17,21 +21,45 @@ def _collapse_content(blocks: Iterable[Dict]) -> str:
     return "".join(text_parts)
 
 
+def _collapse_openai_message_content(content: Union[str, List[Dict], None]) -> str:
+    """Normalise OpenAI message content which may be a string or list of parts."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return _collapse_content(content)
+    return str(content)
+
+
 def anthropic_request_to_openai(payload: Dict, upstream_model: str) -> Dict:
     messages = []
 
     system_prompt = payload.get("system")
     if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
+        # Anthropic may pass system as string or content blocks
+        if isinstance(system_prompt, list):
+            system_text = _collapse_content(system_prompt)
+        else:
+            system_text = str(system_prompt)
+        messages.append({"role": "system", "content": system_text})
 
     for message in payload.get("messages", []):
         role = message.get("role")
         content = message.get("content")
-        if not isinstance(content, list):
+        # Accept either string content or list of content blocks per Anthropic spec
+        if isinstance(content, str):
+            content_text = content
+        elif isinstance(content, list):
+            content_text = _collapse_content(content)
+        else:
+            logger.warning(
+                "Invalid message content type: %s", type(content).__name__
+            )
             raise HTTPException(status_code=400, detail="Invalid content format")
         messages.append({
             "role": role,
-            "content": _collapse_content(content),
+            "content": content_text,
         })
 
     openai_payload = {
@@ -41,11 +69,23 @@ def anthropic_request_to_openai(payload: Dict, upstream_model: str) -> Dict:
     }
 
     if "max_tokens" in payload:
-        openai_payload["max_completion_tokens"] = payload["max_tokens"]
+        # OpenAI chat completions expects `max_tokens`
+        openai_payload["max_tokens"] = payload["max_tokens"]
     if "temperature" in payload:
         openai_payload["temperature"] = payload["temperature"]
+    if "top_p" in payload:
+        openai_payload["top_p"] = payload["top_p"]
     if "metadata" in payload:
         openai_payload["metadata"] = payload["metadata"]
+    # Map Anthropic stop control to OpenAI `stop`
+    if "stop_sequences" in payload:
+        openai_payload["stop"] = payload["stop_sequences"]
+    # Map Anthropic structured output schema to OpenAI `response_format`
+    if "schema" in payload:
+        openai_payload["response_format"] = {
+            "type": "json_schema",
+            "schema": payload["schema"],
+        }
 
     return openai_payload
 
@@ -66,17 +106,18 @@ def openai_response_to_anthropic(response: Dict, proxy_model: str) -> Dict:
         raise HTTPException(status_code=502, detail="Upstream response missing choices")
     choice = choices[0]
     message = choice.get("message", {})
-    content = message.get("content", "")
+    content = _collapse_openai_message_content(message.get("content"))
     finish_reason = choice.get("finish_reason")
 
     anthropic_resp = {
-        "id": response.get("id", ""),
+        "id": response.get("id") or str(uuid4()),
         "type": "message",
         "role": "assistant",
         "model": proxy_model,
         "stop_reason": map_stop_reason(finish_reason),
+        "stop_sequence": None,
         "content": [
-            {"type": "text", "text": content}
+            {"type": "text", "text": content, "citations": None}
         ],
         "usage": {
             "input_tokens": response.get("usage", {}).get("prompt_tokens"),
